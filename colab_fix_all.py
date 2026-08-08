@@ -141,15 +141,43 @@ else:
     ok("G2PWModel 已存在")
 
 # ============================================================
-banner("5) torchcodec（对齐 install.sh，可选）")
+banner("5) torch/torchaudio 对齐（torch 2.13 无配套 torchaudio → 统一 2.11.0+cu126）")
+# 根因：torch 2.13.0+cu126 太新，cu126 源 torchaudio 最高 2.11.0；孤儿 torchaudio .so 需 libcudart.so.13
+# 修法：torch+torchaudio 一起降到 cu126 源都有的 2.11.0（约 2GB 下载）
+_, rc = esh("python -c 'import torchaudio' 2>/dev/null")
+if rc == 0:
+    ok("torchaudio 可导入，跳过")
+else:
+    print("  降级 torch==2.11.0+cu126 + torchaudio==2.11.0+cu126（约 2GB，几分钟）...", flush=True)
+    out, rc = esh(
+        "pip install --no-deps torch==2.11.0+cu126 torchaudio==2.11.0+cu126 "
+        "--index-url https://download.pytorch.org/whl/cu126 2>&1 | tail -4",
+        1800,
+    )
+    print(out[-500:], flush=True)
+    _, rc = esh("python -c 'import torchaudio; print(torchaudio.__version__)'")
+    ok("torchaudio 就绪") if rc == 0 else fail("torchaudio 仍不可用: " + out[-300:])
+
+# torchcodec 重装匹配（非必需，装不上只警告）
 _, rc = esh("python -c 'import torchcodec' 2>/dev/null")
 if rc != 0:
-    print("  安装 torchcodec...", flush=True)
+    print("  重装 torchcodec...", flush=True)
     esh("pip install --no-deps torchcodec --index-url https://download.pytorch.org/whl/cu126 2>&1 | tail -2", 600)
     _, rc = esh("python -c 'import torchcodec' 2>/dev/null")
-    ok("torchcodec 就绪") if rc == 0 else warn("torchcodec 未装上（非必需，先继续）")
+    ok("torchcodec 就绪") if rc == 0 else warn("torchcodec 不可用（非必需，继续）")
 else:
     ok("torchcodec 已存在")
+
+# 最终 torch 自检（必须看到 Tesla T4）
+out, rc = esh(
+    "python -c 'import torch; print(torch.__version__, torch.cuda.is_available(), "
+    "torch.cuda.get_device_name(0) if torch.cuda.is_available() else \"no-gpu\")'"
+)
+print("  torch:", out.strip(), flush=True)
+if rc != 0 or "Tesla T4" not in out:
+    fail("torch 异常（GPU 不可见），中止")
+    sys.exit(1)
+ok("torch + T4 正常")
 
 # ============================================================
 banner("6) Step2 ASR 标注（342 切片，large-v3 中文，约 10~20min）")
