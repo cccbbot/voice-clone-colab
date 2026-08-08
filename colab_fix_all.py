@@ -82,13 +82,25 @@ ok("repo = " + line) if rc == 0 else fail("repo 更新失败: " + out[-300:])
 
 # ============================================================
 banner("2) env_path.sh / PYTHONPATH")
+# PYTHONPATH 必须同时含仓库根 + GPT_SoVITS 子目录：
+#   tools/（仓库根）供 from tools.xxx import；utils.py/module/（GPT_SoVITS 下）供 import utils / from module.models
+PP = "/content/GPT-SoVITS:/content/GPT-SoVITS/GPT_SoVITS"
 if os.path.exists("/content/env_path.sh"):
     content = open("/content/env_path.sh").read()
-    if "PYTHONPATH=/content/GPT-SoVITS" not in content:
+    if "PYTHONPATH=" not in content:
         with open("/content/env_path.sh", "a") as f:
-            f.write("\nexport PYTHONPATH=/content/GPT-SoVITS\n")
-        warn("PYTHONPATH 已追加")
-    ok("env_path.sh 就绪（含 PYTHONPATH）")
+            f.write(f"\nexport PYTHONPATH={PP}\n")
+        warn("PYTHONPATH 已追加（含 GPT_SoVITS 子目录）")
+    else:
+        lines = content.strip().splitlines()
+        for i, ln in enumerate(lines):
+            if ln.startswith("export PYTHONPATH=") and "/GPT_SoVITS" not in ln:
+                lines[i] = f"export PYTHONPATH={PP}"
+                with open("/content/env_path.sh", "w") as f:
+                    f.write("\n".join(lines) + "\n")
+                warn("PYTHONPATH 已升级为 仓库根:GPT_SoVITS")
+                break
+    ok("env_path.sh 就绪（PYTHONPATH=" + PP + "）")
 else:
     fail("env_path.sh 不存在 — 先跑第 2 步 setup.sh")
     sys.exit(1)
@@ -190,7 +202,7 @@ if lists:
     ok(f"ASR .list 已存在: {lists[0]}，跳过")
 else:
     out, rc = esh(
-        f"export PYTHONPATH={REPO} && cd {REPO} && "
+        f"export PYTHONPATH=/content/GPT-SoVITS:/content/GPT-SoVITS/GPT_SoVITS && cd {REPO} && "
         f"python tools/asr/fasterwhisper_asr.py -i {SLICE_OUT} -o {ASR_OUT} -s large-v3 -l zh -p int8 2>&1 | tail -8",
         3600,
     )
@@ -241,12 +253,15 @@ if missing("6-name2semantic.tsv"):
 
 for name, script in steps:
     print(f"  === {name} ===", flush=True)
+    # 注意 set -o pipefail：否则 tail 会掩盖 python 真实退出码（rc 恒为 0）
     out, rc = esh(
-        f"export PYTHONPATH={REPO} && cd {REPO} && "
-        f"env {envs} python -s GPT_SoVITS/prepare_datasets/{script} 2>&1 | tail -8",
+        f"set -o pipefail; export PYTHONPATH=/content/GPT-SoVITS:/content/GPT-SoVITS/GPT_SoVITS && cd {REPO} && "
+        f"env {envs} python -s GPT_SoVITS/prepare_datasets/{script} 2>&1 | tail -8; echo EXIT_CODE=$?",
         3600,
     )
     print(out[-900:], flush=True)
+    m = re.search(r"EXIT_CODE=(\d+)", out)
+    rc = int(m.group(1)) if m else 1
     if rc != 0:
         fail(f"{name} 失败，中止")
         sys.exit(1)
@@ -329,7 +344,7 @@ else:
     with open(f"{TMP}/tmp_s2.json", "w") as f:
         json.dump(data, f)
     out, rc = esh(
-        f"export PYTHONPATH={REPO} && cd {REPO} && "
+        f"export PYTHONPATH=/content/GPT-SoVITS:/content/GPT-SoVITS/GPT_SoVITS && cd {REPO} && "
         f"python -s GPT_SoVITS/s2_train.py --config {TMP}/tmp_s2.json 2>&1 | tail -12",
         10800,
     )
@@ -362,7 +377,7 @@ else:
     with open(f"{TMP}/tmp_s1.yaml", "w") as f:
         yaml.dump(data, f, default_flow_style=False)
     out, rc = esh(
-        f"export PYTHONPATH={REPO} && cd {REPO} && "
+        f"export PYTHONPATH=/content/GPT-SoVITS:/content/GPT-SoVITS/GPT_SoVITS && cd {REPO} && "
         f"python -s GPT_SoVITS/s1_train.py --config_file {TMP}/tmp_s1.yaml 2>&1 | tail -12",
         10800,
     )
