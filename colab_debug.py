@@ -120,10 +120,15 @@ lists = (
     if os.path.isdir(f"{WS}/output/asr_opt")
     else []
 )
-report("ASR .list", "OK" if lists else "WARN(未生成，需跑 Step2)", str(lists))
+report("ASR .list", "OK" if lists else "WARN", "" if lists else "未生成，需跑 Step2")
 s1 = "/content/GPT-SoVITS/logs/tingshu_club"
 for f in ["2-name2text.txt", "4-cnhubert", "5-wav32k", "7-sv_cn", "6-name2semantic.tsv"]:
-    report(f"数据集 {f}", "OK" if os.path.exists(f"{s1}/{f}") else "WARN(未生成，Step3 会补)")
+    report(f"数据集 {f}", "OK" if os.path.exists(f"{s1}/{f}") else "WARN", "" if os.path.exists(f"{s1}/{f}") else "未生成，Step3 会补")
+report(
+    "G2PWModel(text/G2PWModel)",
+    "OK" if os.path.exists("/content/GPT-SoVITS/GPT_SoVITS/text/G2PWModel") else "WARN",
+    "" if os.path.exists("/content/GPT-SoVITS/GPT_SoVITS/text/G2PWModel") else "未下载，1-get-text 中文处理需要",
+)
 
 sec("8) 总结")
 fails = [r for r in results if r[1] == FAIL]
